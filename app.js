@@ -69,35 +69,99 @@ function renderHome(entries){
   $("#addBtn").onclick=()=>openForm();
 }
 
-function renderStats(entries){
-  const year=statsYear,es=entries.filter(e=>e.date.startsWith(String(year))),ns=nEntries(es),ls=es.filter(e=>e.type==="L"),ts=es.filter(e=>e.type==="T");
-  const nDates=ns.map(e=>e.date),lDates=ls.map(e=>e.date);
-  const monthly=Array.from({length:12},(_,m)=>monthEntries(ns,year,m));
-  const chartMax=5, chartH=180;
-  const barMonths=monthly.map((arr,m)=>{const n=arr.filter(e=>e.type==="N").length,l=arr.filter(e=>e.type==="L").length,t=entries.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length;return {m,n,l,t,total:n+l}});
-  $("#screen").innerHTML=`
-    <div class="titlebar"><button class="back" id="backHome">‹</button><h1>ESTADÍSTICAS</h1></div>
-    <div class="year-nav"><button id="prevYear">‹</button><div class="year">${year}⌄</div><button id="nextYear">›</button></div>
-    <section class="panel"><div class="panel-title">RESUMEN GENERAL</div><div class="summary-grid">
-      <div class="summary"><b>${ns.length}</b><span>TOTAL N<br>(N + L)</span></div>
-      <div class="summary"><b>${(ns.length/12).toFixed(1).replace(".",",")}</b><span>N / MES</span></div>
-      <div class="summary"><b>${avgBetween(nDates)==null?"—":avgBetween(nDates).toFixed(1).replace(".",",")}</b><span>DÍAS ENTRE APUNTES</span></div>
-      <div class="summary"><b>${nDates.length?diffDays([...nDates].sort().at(-1),new Date().toISOString().slice(0,10)):"—"}</b><span>DÍAS DESDE ÚLTIMO N/L</span></div>
-    </div></section>
-    <section class="panel"><div class="panel-title">EVOLUCIÓN MENSUAL (N + L)</div>
-      <div class="chart">
-        <div class="chart-grid">${[5,4,3,2,1,0].map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div>
-        <div class="bars">${barMonths.map(({m,n,l,t,total})=>{
-          const shownHeight=Math.min(total,chartMax)/chartMax*chartH;
-          const lHeight=total?l/total*shownHeight:0,nHeight=total?n/total*shownHeight:0;
-          return `<div class="bar-wrap"><i class="bar-t" style="display:${t?"block":"none"}"></i><div class="bar-stack" style="height:${shownHeight}px"><div class="bar-l" style="height:${lHeight}px"></div><div class="bar-n" style="height:${nHeight}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`
-        }).join("")}</div>
+function renderStats(){
+  const year=new Date().getFullYear();
+  const firstDate=entries.length?entries.map(e=>e.date).sort()[0]:null;
+  const startLabel=firstDate?formatDate(firstDate):"—";
+
+  const nl=entries.filter(e=>e.type==="N"||e.type==="L").sort((a,b)=>a.date.localeCompare(b.date));
+  const nOnly=entries.filter(e=>e.type==="N");
+  const lOnly=entries.filter(e=>e.type==="L");
+  const tOnly=entries.filter(e=>e.type==="T");
+
+  const dates=[...new Set(nl.map(e=>e.date))].sort();
+  const intervals=[];
+  for(let i=1;i<dates.length;i++){
+    const a=new Date(dates[i-1]+"T12:00:00");
+    const b=new Date(dates[i]+"T12:00:00");
+    intervals.push(Math.round((b-a)/86400000));
+  }
+  const avgInterval=intervals.length?(intervals.reduce((a,b)=>a+b,0)/intervals.length):0;
+
+  const monthRows=Array.from({length:12},(_,m)=>{
+    const key=`${year}-${String(m+1).padStart(2,"0")}`;
+    const n=nOnly.filter(e=>e.date.startsWith(key)).length;
+    const l=lOnly.filter(e=>e.date.startsWith(key)).length;
+    const t=tOnly.filter(e=>e.date.startsWith(key)).length;
+    return {m,n,l,t,total:n+l};
+  });
+
+  const maxCount=5;
+  const grid=Array.from({length:6},(_,i)=>maxCount-i);
+
+  const bars=monthRows.map(x=>{
+    const hN=x.n/maxCount*100;
+    const hL=x.l/maxCount*100;
+    return `<div class="stat-bar-col">
+      <div class="stat-bar-area">
+        <div class="stat-bar-stack">
+          <div class="stat-bar-n" style="height:${hN}%"></div>
+          <div class="stat-bar-l" style="height:${hL}%"></div>
+        </div>
+        ${x.t?`<i class="stat-t-dot" title="${x.t} T"></i>`:""}
       </div>
-    </section>
-    <div class="card-grid"><div class="data-card N"><h3>N</h3>${dataLines(ns,nDates,"N")}</div><div class="data-card L"><h3>L</h3>${dataLines(ls,lDates,"L")}</div><div class="data-card T full"><h3>T</h3><div class="line"><span>Total</span><strong>${ts.length}</strong></div><div class="line"><span>Días desde la última</span><strong>${ts.length?diffDays([...ts].sort((a,b)=>a.date.localeCompare(b.date)).at(-1).date,new Date().toISOString().slice(0,10))+" días":"—"}</strong></div><div class="line"><span>Nota</span><strong>No cuentan como N</strong></div></div></div>
-    <section class="panel"><div class="panel-title">CÓMO HA IDO</div><div class="rating-grid">${["N","L","T"].map(t=>ratingCard(t,es)).join("")}</div></section>
-    <section class="panel"><div class="panel-title">INTERVALOS</div><div class="card-grid"><div class="data-card N"><h3>N</h3>${intervalLines(nDates)}</div><div class="data-card L"><h3>L</h3>${intervalLines(lDates)}</div></div></section>`;
-  $("#prevYear").onclick=()=>{statsYear--;render()};$("#nextYear").onclick=()=>{statsYear++;render()};$("#backHome").onclick=()=>{currentTab="home";render()};
+      <div class="stat-bar-month">${monthName(x.m)}</div>
+    </div>`;
+  }).join("");
+
+  const gridHtml=grid.map(v=>`<span>${v}</span>`).join("");
+
+  function ratingCard(type,label){
+    const arr=entries.filter(e=>e.type===type);
+    const total=arr.length;
+    const rows=[
+      ["","Sin valorar"],
+      ["Bien","Bien"],
+      ["Regular","Regular"],
+      ["Mal","Mal"]
+    ];
+    return `<div class="stat-card rating-card">
+      <div class="stat-card-title">${label}</div>
+      ${rows.map(([value,text])=>{
+        const n=arr.filter(e=>e.result===value).length;
+        const pct=total?Math.round(n/total*100):0;
+        return `<div class="rating-row ${resultClass(value)}"><span>${text}</span><strong>${n} <small>${pct}%</small></strong></div>`;
+      }).join("")}
+    </div>`;
+  }
+
+  const firstYearEntries=firstDate?entries.filter(e=>e.date>=firstDate):[];
+  const firstYearNL=firstYearEntries.filter(e=>e.type==="N"||e.type==="L");
+  const monthsCovered=firstDate?Math.max(1,((year-new Date(firstDate+"T12:00:00").getFullYear())*12 + (new Date().getMonth()-new Date(firstDate+"T12:00:00").getMonth()) + 1)):0;
+  const monthlyAvg=monthsCovered?firstYearNL.length/monthsCovered:0;
+
+  return `<section class="stats-page">
+    <div class="stats-top">
+      <div class="metric"><span>MEDIA ENTRE N/L</span><strong>${avgInterval?Math.round(avgInterval):"—"}</strong><small>días</small></div>
+      <div class="metric"><span>MEDIA MENSUAL</span><strong>${monthlyAvg?monthlyAvg.toFixed(1):"—"}</strong><small>N/L</small></div>
+      <div class="metric"><span>DATOS DESDE</span><strong>${firstDate?new Date(firstDate+"T12:00:00").toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit"}):"—"}</strong><small>${firstDate?new Date(firstDate+"T12:00:00").getFullYear():""}</small></div>
+    </div>
+
+    <div class="stats-chart-card">
+      <div class="stats-chart-title">N / L POR MES</div>
+      <div class="stats-chart">
+        <div class="stats-y-axis">${gridHtml}</div>
+        <div class="stats-bars">${bars}</div>
+      </div>
+      <div class="stats-legend"><span><i class="legend-n"></i>N</span><span><i class="legend-l"></i>L</span><span><i class="legend-t"></i>T</span></div>
+    </div>
+
+    <div class="stats-cards">
+      ${ratingCard("N","N")}
+      ${ratingCard("L","L")}
+      ${ratingCard("T","T")}
+    </div>
+  </section>`;
 }
 function dataLines(list,dates,type){const av=avgBetween(dates);return `<div class="line"><span>Total</span><strong>${list.length}</strong></div><div class="line"><span>Media entre ${type}</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${range(dates)[0]}</strong></div><div class="line"><span>Más largo</span><strong>${range(dates)[1]}</strong></div>`}
 function range(ds){if(ds.length<2)return["—","—"];const a=[...ds].sort(),d=a.slice(1).map((x,i)=>diffDays(a[i],x));return[Math.min(...d)+" días",Math.max(...d)+" días"]}

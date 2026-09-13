@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#071116">
+  <meta name="theme-color" content="#061014">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Apuntes">
@@ -14,17 +14,16 @@
 </head>
 <body>
 <div id="app">
-  <header class="topbar" aria-hidden="true"></header>
-
+  <div class="console-noise" aria-hidden="true"></div>
+  <div class="console-side left" aria-hidden="true"></div>
+  <div class="console-side right" aria-hidden="true"></div>
   <main id="screen" class="screen"></main>
-
   <nav class="bottom-nav" aria-label="Navegación">
-    <button data-tab="home" class="nav-btn active"><span class="nav-icon">⌂</span><span>Inicio</span></button>
-    <button data-tab="stats" class="nav-btn"><span class="nav-icon">▥</span><span>Estadísticas</span></button>
-    <button data-tab="history" class="nav-btn"><span class="nav-icon">☷</span><span>Historial</span></button>
+    <button data-tab="home" class="nav-btn active"><span class="nav-icon" data-icon="home"></span><span>Inicio</span></button>
+    <button data-tab="stats" class="nav-btn"><span class="nav-icon" data-icon="stats"></span><span>Estadísticas</span></button>
+    <button data-tab="history" class="nav-btn"><span class="nav-icon" data-icon="history"></span><span>Historial</span></button>
   </nav>
 </div>
-
 <div id="modal" class="modal hidden" aria-hidden="true"></div>
 <input id="importFile" type="file" accept="application/json,.json" hidden>
 <script src="app.js"></script>

@@ -2,6 +2,17 @@ const DB_NAME="apuntes-db", STORE="entries", DB_VERSION=1;
 const $=s=>document.querySelector(s);
 let currentTab="home", editingId=null, statsYear=new Date().getFullYear();
 
+function svgIcon(name){
+  const paths={
+    home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',
+    stats:'<path d="M5 20V11"/><path d="M12 20V6"/><path d="M19 20V9"/><path d="M3 20h18"/>',
+    history:'<path d="M6 7h13"/><path d="M6 12h13"/><path d="M6 17h13"/><path d="M3 7h.01"/><path d="M3 12h.01"/><path d="M3 17h.01"/>',
+    back:'<path d="M15 5 8 12l7 7"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]||paths.home}</svg>`;
+}
+function initIcons(){document.querySelectorAll('.nav-icon[data-icon]').forEach(el=>el.innerHTML=svgIcon(el.dataset.icon));}
+
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function allEntries(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readonly"),s=tx.objectStore(STORE),r=s.getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function putEntry(e){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(e);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
@@ -40,8 +51,8 @@ function renderHome(entries){
   const monthNs=monthsElapsed ? ns.length/monthsElapsed : 0;
   const recent=[]; for(let i=3;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);recent.push({y:d.getFullYear(),m:d.getMonth()})}
   $("#screen").innerHTML=`
-    <div class="titlebar"><h1>INICIO</h1></div>
-    <button class="gold-btn add-main" id="addBtn"><span>＋</span>AÑADIR APUNTE</button>
+    <div class="titlebar"><h1>INICIO</h1><i class="status-light"></i></div>
+    <div class="add-shell"><div class="add-side left"></div><button class="gold-btn add-main" id="addBtn"><span>＋</span>AÑADIR APUNTE</button><div class="add-side right"></div></div>
     <div class="stats-row">
       <div class="metric"><div class="label">DÍAS DESDE<br>EL ÚLTIMO APUNTE</div><div class="value">${dates.length?days:"—"}</div><div class="unit">${dates.length?"días":""}</div></div>
       <div class="metric"><div class="label">MEDIA ENTRE<br>APUNTES</div><div class="value">${avg==null?"—":avg.toFixed(1).replace(".",",")}</div><div class="unit">${avg==null?"":"días"}</div></div>
@@ -62,8 +73,7 @@ function renderHome(entries){
           </div>`
         }).join("")}
       </div>
-    </section>
-    <div class="section-note">CONSTANCIA ES PROGRESO</div>`;
+    </section>`;
   $("#addBtn").onclick=()=>openForm();
 }
 
@@ -107,7 +117,7 @@ function renderHistory(entries){
   const es=sorted(entries);
   $("#screen").innerHTML=`
     <div class="titlebar"><button class="back" id="backHome">‹</button><h1>HISTORIAL</h1></div>
-    <div class="history-head"><span><b class="db-icon">●</b> ${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
+    <div class="history-head"><span><b class="db-icon">◉</b> ${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
     <div class="history-tools"><button class="tool-btn" id="exportBtn"><span>↥</span> EXPORTAR</button><button class="tool-btn" id="importBtn"><span>↧</span> IMPORTAR</button></div>
     <div>${es.length?es.map(e=>`<button class="entry" data-id="${e.id}">
       <div class="entry-date">${fmtDate(e.date)}</div><div class="entry-type ${typeClass(e.type)}">${e.type}</div>
@@ -157,5 +167,6 @@ $("#importFile").addEventListener("change",async ev=>{
   }catch{alert("El archivo no es válido.")}ev.target.value="";
 });
 document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;render()});
+initIcons();
 if("serviceWorker"in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));
 render();

@@ -2,22 +2,23 @@ const DB_NAME="apuntes-db", STORE="entries", DB_VERSION=1;
 const $=s=>document.querySelector(s);
 let currentTab="home", editingId=null, statsYear=new Date().getFullYear();
 
-function svgIcon(name){
-  const paths={
-    home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',
-    stats:'<path d="M5 20V11"/><path d="M12 20V6"/><path d="M19 20V9"/><path d="M3 20h18"/>',
-    history:'<path d="M6 7h13"/><path d="M6 12h13"/><path d="M6 17h13"/><path d="M3 7h.01"/><path d="M3 12h.01"/><path d="M3 17h.01"/>',
-    back:'<path d="M15 5 8 12l7 7"/>'
-  };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]||paths.home}</svg>`;
-}
-function initIcons(){document.querySelectorAll('.nav-icon[data-icon]').forEach(el=>el.innerHTML=svgIcon(el.dataset.icon));}
-
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function allEntries(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readonly"),s=tx.objectStore(STORE),r=s.getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function putEntry(e){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(e);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
 async function addEntry(e){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");const r=tx.objectStore(STORE).add(e);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function deleteEntry(id){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).delete(id);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+
+const initialData=[
+  {date:"2026-08-30",type:"N"},{date:"2026-08-10",type:"L"},{date:"2026-08-02",type:"L"},
+  {date:"2026-07-14",type:"L"},{date:"2026-07-01",type:"N"},{date:"2026-06-14",type:"N"},
+  {date:"2026-05-30",type:"N"},{date:"2026-05-21",type:"L"},{date:"2026-05-08",type:"N"}
+];
+async function ensureInitialData(){
+  const existing=await allEntries();
+  for(const item of initialData){
+    if(!existing.some(e=>e.date===item.date&&e.type===item.type)) await addEntry({...item,result:"",note:""});
+  }
+}
 function fmtDate(iso){const [y,m,d]=iso.split("-");return `${d}/${m}/${y.slice(2)}`}
 function monthName(i){return ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"][i]}
 function diffDays(a,b){return Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000)}
@@ -51,8 +52,8 @@ function renderHome(entries){
   const monthNs=monthsElapsed ? ns.length/monthsElapsed : 0;
   const recent=[]; for(let i=3;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);recent.push({y:d.getFullYear(),m:d.getMonth()})}
   $("#screen").innerHTML=`
-    <div class="titlebar"><h1>INICIO</h1><i class="status-light"></i></div>
-    <div class="add-shell"><div class="add-side left"></div><button class="gold-btn add-main" id="addBtn"><span>＋</span>AÑADIR APUNTE</button><div class="add-side right"></div></div>
+    <div class="titlebar"><h1>INICIO</h1></div>
+    <button class="gold-btn add-main" id="addBtn"><span>＋</span>AÑADIR APUNTE</button>
     <div class="stats-row">
       <div class="metric"><div class="label">DÍAS DESDE<br>EL ÚLTIMO APUNTE</div><div class="value">${dates.length?days:"—"}</div><div class="unit">${dates.length?"días":""}</div></div>
       <div class="metric"><div class="label">MEDIA ENTRE<br>APUNTES</div><div class="value">${avg==null?"—":avg.toFixed(1).replace(".",",")}</div><div class="unit">${avg==null?"":"días"}</div></div>
@@ -82,8 +83,7 @@ function renderStats(entries){
   const ns=nEntries(es), l=es.filter(e=>e.type==="L"), ts=es.filter(e=>e.type==="T");
   const nDates=ns.map(e=>e.date), lDates=l.map(e=>e.date);
   const total=ns.length, monthly=Array.from({length:12},(_,m)=>ns.filter(e=>e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)));
-  const maxN=Math.max(7,...monthly.map(a=>a.length));
-  const chartMax=7;
+  const chartMax=5;
   $("#screen").innerHTML=`
     <div class="titlebar"><button class="back" id="backHome">‹</button><h1>ESTADÍSTICAS</h1></div>
     <div class="year-nav"><button id="prevYear">‹</button><div class="year">${year}⌄</div><button id="nextYear">›</button></div>
@@ -96,8 +96,8 @@ function renderStats(entries){
       </div>
     </section>
     <section class="panel"><div class="panel-title">EVOLUCIÓN MENSUAL (N + L)</div>
-      <div class="chart"><div class="chart-grid">${[7,6,5,4,3,2,1,0].map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div>
-      <div class="bars">${monthly.map((arr,m)=>{const nc=arr.filter(e=>e.type==="N").length,lc=arr.filter(e=>e.type==="L").length,tc=es.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length;return `<div class="bar-wrap"><i class="bar-t" style="display:${tc?"block":"none"}"></i><div class="bar-stack"><div class="bar-l" style="height:${lc/chartMax*150}px"></div><div class="bar-n" style="height:${nc/chartMax*150}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`}).join("")}</div></div>
+      <div class="chart"><div class="chart-grid">${[5,4,3,2,1,0].map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div>
+      <div class="bars">${monthly.map((arr,m)=>{const nc=arr.filter(e=>e.type==="N").length,lc=arr.filter(e=>e.type==="L").length,tc=es.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length,total=nc+lc,scale=total?Math.min(1,chartMax/total):1;return `<div class="bar-wrap"><i class="bar-t" style="display:${tc?"block":"none"}"></i><div class="bar-stack"><div class="bar-l" style="height:${lc*scale*27}px"></div><div class="bar-n" style="height:${nc*scale*27}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`}).join("")}</div></div>
     </section>
     <div class="card-grid">
       <div class="data-card N"><h3>N</h3>${dataLines(ns,nDates,"N")}</div>
@@ -111,13 +111,13 @@ function renderStats(entries){
 function dataLines(list,dates,type){const av=avgBetween(dates);let ds=dates.length?[...dates].sort():"";return `<div class="line"><span>Total</span><strong>${list.length}</strong></div><div class="line"><span>Media entre ${type}</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${range(dates)[0]}</strong></div><div class="line"><span>Más largo</span><strong>${range(dates)[1]}</strong></div>`}
 function range(ds){if(ds.length<2)return["—","—"];const a=[...ds].sort();const d=a.slice(1).map((x,i)=>diffDays(a[i],x));return[Math.min(...d)+" días",Math.max(...d)+" días"]}
 function intervalLines(ds){const [a,b]=range(ds),av=avgBetween(ds);return `<div class="line"><span>Media</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${a}</strong></div><div class="line"><span>Más largo</span><strong>${b}</strong></div>`}
-function ratingCard(type,es){const arr=es.filter(e=>e.type===type),rated=arr.filter(e=>["Bien","Regular","Mal"].includes(e.result)),total=rated.length,unrated=arr.length-rated.length;return `<div class="rating"><h4 class="${type==="N"?"n":type==="L"?"l":"t"}">${type}</h4>${["Bien","Regular","Mal"].map(r=>{const n=rated.filter(e=>e.result===r).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}${unrated?`<div class="rating-row unrated"><span>Sin valorar</span><strong>${unrated}</strong></div>`:""}</div>`}
+function ratingCard(type,es){const arr=es.filter(e=>e.type===type),total=arr.length;return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${["Bien","Regular","Mal"].map(r=>{const n=arr.filter(e=>e.result===r).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}</div>`}
 
 function renderHistory(entries){
   const es=sorted(entries);
   $("#screen").innerHTML=`
     <div class="titlebar"><button class="back" id="backHome">‹</button><h1>HISTORIAL</h1></div>
-    <div class="history-head"><span><b class="db-icon">◉</b> ${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
+    <div class="history-head"><span><b class="db-icon">●</b> ${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
     <div class="history-tools"><button class="tool-btn" id="exportBtn"><span>↥</span> EXPORTAR</button><button class="tool-btn" id="importBtn"><span>↧</span> IMPORTAR</button></div>
     <div>${es.length?es.map(e=>`<button class="entry" data-id="${e.id}">
       <div class="entry-date">${fmtDate(e.date)}</div><div class="entry-type ${typeClass(e.type)}">${e.type}</div>
@@ -141,7 +141,8 @@ async function openForm(id=null){
     <div class="field-label" style="margin-top:16px">TIPO</div>
     <div class="choice-grid" id="typeChoices">${["N","L","T"].map(t=>`<button class="choice type-${t.toLowerCase()} ${t===type?"selected":""}" data-type="${t}">${t}</button>`).join("")}</div>
     <div class="field-label" style="margin-top:16px">CÓMO HA IDO</div>
-    <div class="choice-grid" id="resultChoices">${["","Mal","Regular","Bien"].map(r=>`<button class="choice ${resultClass(r)} ${r===result?"selected":""}" data-result="${r}">${r||"Sin valorar"}</button>`).join("")}</div>
+    <div class="choice-grid" id="resultChoices">${["Mal","Regular","Bien"].map(r=>`<button class="choice ${resultClass(r)} ${r===result?"selected":""}" data-result="${r}">${r}</button>`).join("")}</div>
+    <button class="unrated-btn ${result===""?"selected":""}" id="clearResult" type="button">SIN VALORAR</button>
     <div class="field-label" style="margin-top:16px">NOTAS <span style="opacity:.6">(opcional)</span></div>
     <textarea class="notes" id="fNote" maxlength="200" placeholder="Añade una nota...">${escapeHtml(note)}</textarea>
     <div class="form-actions" style="margin-top:12px"><button class="secondary" id="cancelForm">CANCELAR</button><button class="gold-btn" id="saveForm">GUARDAR APUNTE</button></div>
@@ -149,7 +150,8 @@ async function openForm(id=null){
   </div>`;
   let selectedType=type,selectedResult=result;
   document.querySelectorAll("#typeChoices .choice").forEach(b=>b.onclick=()=>{selectedType=b.dataset.type;document.querySelectorAll("#typeChoices .choice").forEach(x=>x.classList.remove("selected"));b.classList.add("selected")});
-  document.querySelectorAll("#resultChoices .choice").forEach(b=>b.onclick=()=>{selectedResult=b.dataset.result;document.querySelectorAll("#resultChoices .choice").forEach(x=>x.classList.remove("selected"));b.classList.add("selected")});
+  document.querySelectorAll("#resultChoices .choice").forEach(b=>b.onclick=()=>{selectedResult=b.dataset.result;document.querySelectorAll("#resultChoices .choice").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");$("#clearResult").classList.remove("selected")});
+  $("#clearResult").onclick=()=>{selectedResult="";document.querySelectorAll("#resultChoices .choice").forEach(x=>x.classList.remove("selected"));$("#clearResult").classList.add("selected")};
   const close=()=>{$("#modal").classList.add("hidden");editingId=null};
   $("#closeForm").onclick=close;$("#cancelForm").onclick=close;
   $("#saveForm").onclick=async()=>{const wasEditing=Boolean(editingId);const e={...(existing||{}),date:$("#fDate").value,type:selectedType,result:selectedResult,note:$("#fNote").value.trim()};if(!e.date)return;wasEditing?await putEntry(e):await addEntry(e);close();showToast(wasEditing?"Apunte actualizado":"Apunte guardado");render()};
@@ -162,11 +164,10 @@ async function exportData(){
 }
 $("#importFile").addEventListener("change",async ev=>{
   const file=ev.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.entries))throw Error();
-    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||!["","Mal","Regular","Bien"].includes(e.result??""))continue;await addEntry({date:e.date,type:e.type,result:e.result??"",note:e.note||""})}
+    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||![(""),"Mal","Regular","Bien"].includes(e.result||""))continue;await addEntry({date:e.date,type:e.type,result:e.result,note:e.note||""})}
     showToast("Datos importados");render();
   }catch{alert("El archivo no es válido.")}ev.target.value="";
 });
 document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;render()});
-initIcons();
 if("serviceWorker"in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));
-render();
+ensureInitialData().then(render);

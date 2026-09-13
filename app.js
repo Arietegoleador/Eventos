@@ -66,9 +66,13 @@ function renderHome(entries){
         ${recent.map(({y,m})=>{
           const key=`${y}-${String(m+1).padStart(2,"0")}`;
           const es=ns.filter(e=>e.date.startsWith(key)).sort((a,b)=>a.date.localeCompare(b.date));
+          const visible=es.slice(-5);
           const ts=entries.filter(e=>e.type==="T"&&e.date.startsWith(key)).length;
           return `<div class="month-col ${m===now.getMonth()&&y===now.getFullYear()?"current":""}">
-            <div class="slots">${[4,3,2,1,0].map(i=>{const e=es[i];return e?`<div class="slot ${resultClass(e.result)} ${e.type==="L"?"l":""}">${e.type==="L"?"L":""}</div>`:`<div class="slot empty"></div>`}).join("")}</div>
+            <div class="slots">${Array.from({length:5},(_,row)=>{
+              const e=visible[row];
+              return e?`<div class="slot ${resultClass(e.result)} ${e.type==="L"?"l":""}">${e.type==="L"?"L":""}</div>`:`<div class="slot empty"></div>`;
+            }).join("")}</div>
             <div class="t-dots">${Array.from({length:Math.min(ts,5)},()=>`<i class="t-dot"></i>`).join("")}</div>
             <div class="month-plate ${es.length>5?"over":""}"><span>${monthName(m)}</span><small>${y}</small>${es.length>5?`<b>+${es.length-5}</b>`:""}</div>
           </div>`
@@ -97,7 +101,7 @@ function renderStats(entries){
     </section>
     <section class="panel"><div class="panel-title">EVOLUCIÓN MENSUAL (N + L)</div>
       <div class="chart"><div class="chart-grid">${[5,4,3,2,1,0].map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div>
-      <div class="bars">${monthly.map((arr,m)=>{const nc=arr.filter(e=>e.type==="N").length,lc=arr.filter(e=>e.type==="L").length,tc=es.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length,total=nc+lc,scale=total?Math.min(1,chartMax/total):1;return `<div class="bar-wrap"><i class="bar-t" style="display:${tc?"block":"none"}"></i><div class="bar-stack"><div class="bar-l" style="height:${lc*scale*27}px"></div><div class="bar-n" style="height:${nc*scale*27}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`}).join("")}</div></div>
+      <div class="bars">${monthly.map((arr,m)=>{const nc=arr.filter(e=>e.type==="N").length,lc=arr.filter(e=>e.type==="L").length,tc=es.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length,total=nc+lc,scale=total?Math.min(1,chartMax/total):1;return `<div class="bar-wrap"><i class="bar-t" style="display:${tc?"block":"none"}"></i><div class="bar-stack"><div class="bar-l" style="height:${lc*36*scale}px"></div><div class="bar-n" style="height:${nc*36*scale}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`}).join("")}</div></div>
     </section>
     <div class="card-grid">
       <div class="data-card N"><h3>N</h3>${dataLines(ns,nDates,"N")}</div>
@@ -111,7 +115,7 @@ function renderStats(entries){
 function dataLines(list,dates,type){const av=avgBetween(dates);let ds=dates.length?[...dates].sort():"";return `<div class="line"><span>Total</span><strong>${list.length}</strong></div><div class="line"><span>Media entre ${type}</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${range(dates)[0]}</strong></div><div class="line"><span>Más largo</span><strong>${range(dates)[1]}</strong></div>`}
 function range(ds){if(ds.length<2)return["—","—"];const a=[...ds].sort();const d=a.slice(1).map((x,i)=>diffDays(a[i],x));return[Math.min(...d)+" días",Math.max(...d)+" días"]}
 function intervalLines(ds){const [a,b]=range(ds),av=avgBetween(ds);return `<div class="line"><span>Media</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${a}</strong></div><div class="line"><span>Más largo</span><strong>${b}</strong></div>`}
-function ratingCard(type,es){const arr=es.filter(e=>e.type===type),total=arr.length;return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${["Bien","Regular","Mal"].map(r=>{const n=arr.filter(e=>e.result===r).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}</div>`}
+function ratingCard(type,es){const arr=es.filter(e=>e.type===type),total=arr.length;return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${["","Bien","Regular","Mal"].map(r=>{const n=arr.filter(e=>e.result===r).length;const label=r||"Sin valorar";return `<div class="rating-row ${r?resultClass(r):"unrated"}"><span>${label}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}</div>`}
 
 function renderHistory(entries){
   const es=sorted(entries);

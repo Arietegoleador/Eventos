@@ -2,171 +2,69 @@ const DB_NAME="apuntes-db", STORE="entries", DB_VERSION=1;
 const $=s=>document.querySelector(s);
 let currentTab="home", editingId=null, statsYear=new Date().getFullYear();
 
-function svgIcon(name){
-  const paths={
-    home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/>',
-    stats:'<path d="M5 20V11"/><path d="M12 20V6"/><path d="M19 20V9"/><path d="M3 20h18"/>',
-    history:'<path d="M6 7h13"/><path d="M6 12h13"/><path d="M6 17h13"/><path d="M3 7h.01"/><path d="M3 12h.01"/><path d="M3 17h.01"/>',
-    back:'<path d="M15 5 8 12l7 7"/>'
-  };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]||paths.home}</svg>`;
-}
-function initIcons(){document.querySelectorAll('.nav-icon[data-icon]').forEach(el=>el.innerHTML=svgIcon(el.dataset.icon));}
-
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-async function allEntries(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readonly"),s=tx.objectStore(STORE),r=s.getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-async function putEntry(e){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(e);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
-async function addEntry(e){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");const r=tx.objectStore(STORE).add(e);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-async function deleteEntry(id){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).delete(id);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function allEntries(){const db=await openDB();return new Promise((res,rej)=>{const r=db.transaction(STORE,"readonly").objectStore(STORE).getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function addEntry(e){const db=await openDB();return new Promise((res,rej)=>{const r=db.transaction(STORE,"readwrite").objectStore(STORE).add(e);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function putEntry(e){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(e);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
+async function deleteEntry(id){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
 function fmtDate(iso){const [y,m,d]=iso.split("-");return `${d}/${m}/${y.slice(2)}`}
+function dayName(iso){const [y,m,d]=iso.split("-");return ["DOM","LUN","MAR","MIÉ","JUE","VIE","SÁB"][new Date(Number(y),Number(m)-1,Number(d)).getDay()]}
 function monthName(i){return ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"][i]}
 function diffDays(a,b){return Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000)}
-function mean(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:0}
-function avgBetween(arr){if(arr.length<2)return null;arr=[...arr].sort();return mean(arr.slice(1).map((d,i)=>diffDays(arr[i],d)))}
-function nEntries(entries){return entries.filter(e=>e.type==="N"||e.type==="L")}
-function sorted(entries){return [...entries].sort((a,b)=>b.date.localeCompare(a.date))}
+function avgBetween(ds){if(ds.length<2)return null;const a=[...ds].sort();return a.slice(1).reduce((s,d,i)=>s+diffDays(a[i],d),0)/(a.length-1)}
+function nEntries(es){return es.filter(e=>e.type==="N"||e.type==="L")}
+function sorted(es){return [...es].sort((a,b)=>b.date.localeCompare(a.date)||(b.id||0)-(a.id||0))}
+function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function resultClass(r){return r==="Bien"?"bien":r==="Regular"?"regular":r==="Mal"?"mal":"unrated"}
-function typeClass(t){return t}
-function showToast(msg){const x=document.createElement("div");x.className="toast";x.textContent=msg;document.body.appendChild(x);setTimeout(()=>x.remove(),1800)}
+function showToast(msg){const x=document.createElement("div");x.className="toast";x.textContent=msg;document.body.appendChild(x);setTimeout(()=>x.remove(),1600)}
 
-async function render(){
-  window.scrollTo(0,0);
-  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.tab===currentTab));
-  document.body.classList.toggle("secondary-screen",currentTab!=="home");
-  const entries=await allEntries();
-  if(currentTab==="home") renderHome(entries);
-  if(currentTab==="stats") renderStats(entries);
-  if(currentTab==="history") renderHistory(entries);
-}
+function nav(active){return `<div class="skin-nav"><button data-tab="home" class="${active==="home"?"active":""}"><b>⌂</b><span>Inicio</span></button><button data-tab="stats" class="${active==="stats"?"active":""}"><b>▥</b><span>Estadísticas</span></button><button data-tab="history" class="${active==="history"?"active":""}"><b>☷</b><span>Historial</span></button></div>`}
+function bindNav(){document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;render()})}
+function title(text,back=false){return `<div class="skin-title">${back?'<button class="skin-back" id="backBtn">‹</button>':''}<span>${text}</span></div>`}
+
+async function render(){const es=await allEntries();document.body.className=`tab-${currentTab}`;if(currentTab==="home")renderHome(es);else if(currentTab==="stats")renderStats(es);else renderHistory(es)}
 
 function renderHome(entries){
-  const ns=nEntries(entries).sort((a,b)=>b.date.localeCompare(a.date));
-  const dates=ns.map(e=>e.date);
-  const avg=avgBetween(dates);
-  const now=new Date(); const today=now.toISOString().slice(0,10);
-  const days=dates.length?Math.max(0,diffDays(dates[0],today)):0;
-  const ym=new Date(now.getFullYear(),now.getMonth(),1);
-  const firstDate=dates.length ? dates[dates.length-1] : null;
-  const monthsElapsed=firstDate ? ((now.getFullYear()-Number(firstDate.slice(0,4)))*12 + (now.getMonth()-Number(firstDate.slice(5,7))+1)) : 0;
-  const monthNs=monthsElapsed ? ns.length/monthsElapsed : 0;
-  const recent=[]; for(let i=3;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);recent.push({y:d.getFullYear(),m:d.getMonth()})}
-  $("#screen").innerHTML=`
-    <div class="titlebar"><h1>INICIO</h1><i class="status-light"></i></div>
-    <div class="add-shell"><div class="add-side left"></div><button class="gold-btn add-main" id="addBtn"><span>＋</span>AÑADIR APUNTE</button><div class="add-side right"></div></div>
-    <div class="stats-row">
-      <div class="metric"><div class="label">DÍAS DESDE<br>EL ÚLTIMO APUNTE</div><div class="value">${dates.length?days:"—"}</div><div class="unit">${dates.length?"días":""}</div></div>
-      <div class="metric"><div class="label">MEDIA ENTRE<br>APUNTES</div><div class="value">${avg==null?"—":avg.toFixed(1).replace(".",",")}</div><div class="unit">${avg==null?"":"días"}</div></div>
-      <div class="metric"><div class="label">MEDIA MENSUAL</div><div class="value">${dates.length?monthNs.toFixed(1).replace(".",","):"—"}</div><div class="unit">N/mes</div></div>
-    </div>
-    <section class="panel">
-      <div class="panel-title">ÚLTIMOS 4 MESES</div>
-      <div class="month-grid">
-        <div class="rownums">${[5,4,3,2,1].map(n=>`<span>${n}</span>`).join("")}</div>
-        ${recent.map(({y,m})=>{
-          const key=`${y}-${String(m+1).padStart(2,"0")}`;
-          const es=ns.filter(e=>e.date.startsWith(key)).sort((a,b)=>a.date.localeCompare(b.date));
-          const ts=entries.filter(e=>e.type==="T"&&e.date.startsWith(key)).length;
-          return `<div class="month-col ${m===now.getMonth()&&y===now.getFullYear()?"current":""}">
-            <div class="slots">${[4,3,2,1,0].map(i=>{const e=es[i];return e?`<div class="slot ${resultClass(e.result)} ${e.type==="L"?"l":""}">${e.type==="L"?"L":""}</div>`:`<div class="slot empty"></div>`}).join("")}</div>
-            <div class="t-dots">${Array.from({length:Math.min(ts,5)},()=>`<i class="t-dot"></i>`).join("")}</div>
-            <div class="month-plate ${es.length>5?"over":""}"><span>${monthName(m)}</span><small>${y}</small>${es.length>5?`<b>+${es.length-5}</b>`:""}</div>
-          </div>`
-        }).join("")}
-      </div>
-    </section>`;
-  $("#addBtn").onclick=()=>openForm();
+ const ns=nEntries(entries).sort((a,b)=>a.date.localeCompare(b.date));
+ const dates=ns.map(e=>e.date), today=new Date().toISOString().slice(0,10);
+ const days=dates.length?Math.max(0,diffDays(dates[dates.length-1],today)):null;
+ const avg=avgBetween(dates);
+ const first=dates[0];
+ const now=new Date();
+ const monthsElapsed=first?((now.getFullYear()-+first.slice(0,4))*12+(now.getMonth()-(+first.slice(5,7)-1))+1):0;
+ const monthly=monthsElapsed?ns.length/monthsElapsed:null;
+ const recent=[];for(let i=3;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);recent.push({y:d.getFullYear(),m:d.getMonth()})}
+ const dyn=`<div class="home-values">
+   <div class="hv hv1"><strong>${days==null?'—':days}</strong>${days==null?'':'<em>días</em>'}</div>
+   <div class="hv hv2"><strong>${avg==null?'—':avg.toFixed(1).replace('.',',')}</strong>${avg==null?'':'<em>días</em>'}</div>
+   <div class="hv hv3"><strong>${monthly==null?'—':monthly.toFixed(1).replace('.',',')}</strong><em>N/mes</em></div>
+ </div>
+ <div class="home-grid-overlay"><div class="row-labels">${[5,4,3,2,1].map(x=>`<span>${x}</span>`).join('')}</div>${recent.map(({y,m})=>{
+   const key=`${y}-${String(m+1).padStart(2,'0')}`, arr=ns.filter(e=>e.date.startsWith(key)).sort((a,b)=>a.date.localeCompare(b.date)), ts=entries.filter(e=>e.type==='T'&&e.date.startsWith(key)).length;
+   return `<div class="dyn-month ${m===now.getMonth()&&y===now.getFullYear()?'current':''}"><div class="dyn-slots">${[4,3,2,1,0].map(i=>{const e=arr[i];return `<div class="dyn-slot ${e?resultClass(e.result):'empty'} ${e?.type==='L'?'is-l':''}">${e?.type==='L'?'L':''}</div>`}).join('')}</div><div class="dyn-dots">${Array.from({length:Math.min(ts,5)},()=>'<i></i>').join('')}</div><div class="dyn-plate ${arr.length>5?'over':''}"><b>${monthName(m)}</b><small>${y}</small>${arr.length>5?`<strong>+${arr.length-5}</strong>`:''}</div></div>`}).join('')}</div>
+ <button class="hit add-hit" id="addBtn" aria-label="Añadir apunte"></button>${nav('home')}`;
+ $("#screen").innerHTML=`<div class="skin home-skin"></div><div class="skin-overlay">${dyn}</div>`;
+ $("#addBtn").onclick=()=>openForm();bindNav();
 }
 
+function chartBars(es){const counts=Array.from({length:6},(_,i)=>{const m=new Date().getMonth()-5+i;const d=new Date(statsYear,m,1),key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;return {m:d.getMonth(),n:es.filter(e=>(e.type==='N'||e.type==='L')&&e.date.startsWith(key)).length}});const max=Math.max(7,...counts.map(x=>x.n));return counts.map(x=>`<div class="bar-col"><div class="bar" style="height:${Math.max(3,x.n/max*100)}%"></div><span>${monthName(x.m)}</span></div>`).join('')}
+function donut(es){const ns=es.filter(e=>e.type==='N').length, ls=es.filter(e=>e.type==='L').length, ts=es.filter(e=>e.type==='T').length,total=ns+ls+ts||1;const a=ns/total*360,b=(ns+ls)/total*360;return `<div class="donut" style="--a:${a}deg;--b:${b}deg"><b>${ns+ls+ts}</b><small>apuntes</small></div><div class="legend"><span><i class="g"></i>Normales <b>${Math.round(ns/total*100)}%</b></span><span><i class="y"></i>Ligeros <b>${Math.round(ls/total*100)}%</b></span><span><i class="r"></i>Técnicos <b>${Math.round(ts/total*100)}%</b></span></div>`}
+function weekBars(es){const counts=[0,0,0,0,0,0,0];es.forEach(e=>{const [y,m,d]=e.date.split('-');counts[new Date(+y,+m-1,+d).getDay()]++});const order=[1,2,3,4,5,6,0], max=Math.max(7,...counts);return order.map(i=>`<div class="bar-col blue"><div class="bar" style="height:${Math.max(3,counts[i]/max*100)}%"></div><span>${['D','L','M','X','J','V','S'][i]}</span></div>`).join('')}
 function renderStats(entries){
-  const year=statsYear, es=entries.filter(e=>e.date.startsWith(String(year)));
-  const ns=nEntries(es), l=es.filter(e=>e.type==="L"), ts=es.filter(e=>e.type==="T");
-  const nDates=ns.map(e=>e.date), lDates=l.map(e=>e.date);
-  const total=ns.length, monthly=Array.from({length:12},(_,m)=>ns.filter(e=>e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)));
-  const maxN=Math.max(7,...monthly.map(a=>a.length));
-  const chartMax=7;
-  $("#screen").innerHTML=`
-    <div class="titlebar"><button class="back" id="backHome">‹</button><h1>ESTADÍSTICAS</h1></div>
-    <div class="year-nav"><button id="prevYear">‹</button><div class="year">${year}⌄</div><button id="nextYear">›</button></div>
-    <section class="panel"><div class="panel-title">RESUMEN GENERAL</div>
-      <div class="summary-grid">
-        <div class="summary"><b>${total}</b><span>TOTAL N<br>(N + L)</span></div>
-        <div class="summary"><b>${monthly.length? (total/12).toFixed(1).replace(".",","):"—"}</b><span>N / MES</span></div>
-        <div class="summary"><b>${avgBetween(nDates)==null?"—":avgBetween(nDates).toFixed(1).replace(".",",")}</b><span>DÍAS ENTRE APUNTES</span></div>
-        <div class="summary"><b>${nDates.length?diffDays(nDates.sort().at(-1),new Date().toISOString().slice(0,10)):"—"}</b><span>DÍAS DESDE ÚLTIMO N/L</span></div>
-      </div>
-    </section>
-    <section class="panel"><div class="panel-title">EVOLUCIÓN MENSUAL (N + L)</div>
-      <div class="chart"><div class="chart-grid">${[7,6,5,4,3,2,1,0].map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div>
-      <div class="bars">${monthly.map((arr,m)=>{const nc=arr.filter(e=>e.type==="N").length,lc=arr.filter(e=>e.type==="L").length,tc=es.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length;return `<div class="bar-wrap"><i class="bar-t" style="display:${tc?"block":"none"}"></i><div class="bar-stack"><div class="bar-l" style="height:${lc/chartMax*150}px"></div><div class="bar-n" style="height:${nc/chartMax*150}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`}).join("")}</div></div>
-    </section>
-    <div class="card-grid">
-      <div class="data-card N"><h3>N</h3>${dataLines(ns,nDates,"N")}</div>
-      <div class="data-card L"><h3>L</h3>${dataLines(l,lDates,"L")}</div>
-      <div class="data-card T full"><h3>T</h3><div class="line"><span>Total</span><strong>${ts.length}</strong></div><div class="line"><span>Días desde la última</span><strong>${ts.length?diffDays([...ts].sort((a,b)=>a.date.localeCompare(b.date)).at(-1).date,new Date().toISOString().slice(0,10)):"—"} días</strong></div><div class="line"><span>Nota</span><strong>No cuentan como N</strong></div></div>
-    </div>
-    <section class="panel"><div class="panel-title">CÓMO HA IDO</div><div class="rating-grid">${["N","L","T"].map(t=>ratingCard(t,es)).join("")}</div></section>
-    <section class="panel"><div class="panel-title">INTERVALOS</div><div class="card-grid"><div class="data-card N"><h3>N</h3>${intervalLines(nDates)}</div><div class="data-card L"><h3>L</h3>${intervalLines(lDates)}</div></div></section>`;
-  $("#prevYear").onclick=()=>{statsYear--;render()};$("#nextYear").onclick=()=>{statsYear++;render()};$("#backHome").onclick=()=>{currentTab="home";render()};
-}
-function dataLines(list,dates,type){const av=avgBetween(dates);let ds=dates.length?[...dates].sort():"";return `<div class="line"><span>Total</span><strong>${list.length}</strong></div><div class="line"><span>Media entre ${type}</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${range(dates)[0]}</strong></div><div class="line"><span>Más largo</span><strong>${range(dates)[1]}</strong></div>`}
-function range(ds){if(ds.length<2)return["—","—"];const a=[...ds].sort();const d=a.slice(1).map((x,i)=>diffDays(a[i],x));return[Math.min(...d)+" días",Math.max(...d)+" días"]}
-function intervalLines(ds){const [a,b]=range(ds),av=avgBetween(ds);return `<div class="line"><span>Media</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${a}</strong></div><div class="line"><span>Más largo</span><strong>${b}</strong></div>`}
-function ratingCard(type,es){const arr=es.filter(e=>e.type===type),rated=arr.filter(e=>["Bien","Regular","Mal"].includes(e.result)),total=rated.length,unrated=arr.length-rated.length;return `<div class="rating"><h4 class="${type==="N"?"n":type==="L"?"l":"t"}">${type}</h4>${["Bien","Regular","Mal"].map(r=>{const n=rated.filter(e=>e.result===r).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}${unrated?`<div class="rating-row unrated"><span>Sin valorar</span><strong>${unrated}</strong></div>`:""}</div>`}
-
-function renderHistory(entries){
-  const es=sorted(entries);
-  $("#screen").innerHTML=`
-    <div class="titlebar"><button class="back" id="backHome">‹</button><h1>HISTORIAL</h1></div>
-    <div class="history-head"><span><b class="db-icon">◉</b> ${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
-    <div class="history-tools"><button class="tool-btn" id="exportBtn"><span>↥</span> EXPORTAR</button><button class="tool-btn" id="importBtn"><span>↧</span> IMPORTAR</button></div>
-    <div>${es.length?es.map(e=>`<button class="entry" data-id="${e.id}">
-      <div class="entry-date">${fmtDate(e.date)}</div><div class="entry-type ${typeClass(e.type)}">${e.type}</div>
-      <div><div class="entry-result ${resultClass(e.result)}">${e.result||"Sin valorar"}</div>${e.note?`<div class="entry-note">${escapeHtml(e.note)}</div>`:""}</div><div class="chev">›</div>
-    </button>`).join(""):`<section class="panel" style="text-align:center;padding:35px 15px;color:#77949f">Aún no hay apuntes.</section>`}</div>`;
-  $("#backHome").onclick=()=>{currentTab="home";render()};
-  $("#exportBtn").onclick=exportData;$("#importBtn").onclick=()=>$("#importFile").click();
-  document.querySelectorAll(".entry").forEach(b=>b.onclick=()=>openForm(Number(b.dataset.id)));
-}
-function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
-
-async function openForm(id=null){
-  editingId=id;
-  const existing=id? (await allEntries()).find(e=>e.id===id):null;
-  const date=existing?.date||new Date().toISOString().slice(0,10);
-  const type=existing?.type||"N", result=existing?.result||"", note=existing?.note||"";
-  $("#modal").classList.remove("hidden");$("#modal").setAttribute("aria-hidden","false");
-  $("#modal").innerHTML=`<div class="modal-card">
-    <div class="titlebar"><button class="back" id="closeForm">‹</button><h1>${id?"EDITAR APUNTE":"AÑADIR APUNTE"}</h1></div>
-    <div class="field-label">FECHA</div><input class="date-input" id="fDate" type="date" value="${date}">
-    <div class="field-label" style="margin-top:16px">TIPO</div>
-    <div class="choice-grid" id="typeChoices">${["N","L","T"].map(t=>`<button class="choice type-${t.toLowerCase()} ${t===type?"selected":""}" data-type="${t}">${t}</button>`).join("")}</div>
-    <div class="field-label" style="margin-top:16px">CÓMO HA IDO</div>
-    <div class="choice-grid" id="resultChoices">${["","Mal","Regular","Bien"].map(r=>`<button class="choice ${resultClass(r)} ${r===result?"selected":""}" data-result="${r}">${r||"Sin valorar"}</button>`).join("")}</div>
-    <div class="field-label" style="margin-top:16px">NOTAS <span style="opacity:.6">(opcional)</span></div>
-    <textarea class="notes" id="fNote" maxlength="200" placeholder="Añade una nota...">${escapeHtml(note)}</textarea>
-    <div class="form-actions" style="margin-top:12px"><button class="secondary" id="cancelForm">CANCELAR</button><button class="gold-btn" id="saveForm">GUARDAR APUNTE</button></div>
-    ${id?`<button class="danger-btn" id="deleteForm" style="width:100%;margin-top:10px;background:linear-gradient(#ff6767,#bd1616);color:#fff;border-color:#ff8b8b">ELIMINAR APUNTE</button>`:""}
-  </div>`;
-  let selectedType=type,selectedResult=result;
-  document.querySelectorAll("#typeChoices .choice").forEach(b=>b.onclick=()=>{selectedType=b.dataset.type;document.querySelectorAll("#typeChoices .choice").forEach(x=>x.classList.remove("selected"));b.classList.add("selected")});
-  document.querySelectorAll("#resultChoices .choice").forEach(b=>b.onclick=()=>{selectedResult=b.dataset.result;document.querySelectorAll("#resultChoices .choice").forEach(x=>x.classList.remove("selected"));b.classList.add("selected")});
-  const close=()=>{$("#modal").classList.add("hidden");editingId=null};
-  $("#closeForm").onclick=close;$("#cancelForm").onclick=close;
-  $("#saveForm").onclick=async()=>{const wasEditing=Boolean(editingId);const e={...(existing||{}),date:$("#fDate").value,type:selectedType,result:selectedResult,note:$("#fNote").value.trim()};if(!e.date)return;wasEditing?await putEntry(e):await addEntry(e);close();showToast(wasEditing?"Apunte actualizado":"Apunte guardado");render()};
-  if(id)$("#deleteForm").onclick=async()=>{if(confirm("¿Eliminar este apunte?")){await deleteEntry(id);close();showToast("Apunte eliminado");render()}};
+ const year=statsYear, es=entries.filter(e=>e.date.startsWith(String(year)));
+ const n=es.filter(e=>e.type==='N'), l=es.filter(e=>e.type==='L'), t=es.filter(e=>e.type==='T');
+ $("#screen").innerHTML=`<div class="skin stats-skin"></div><div class="skin-overlay stats-overlay">${title('ESTADÍSTICAS',true)}
+   <div class="stats-mask monthly-mask"><div class="box-title">APUNTES POR MES</div><div class="bars">${chartBars(es)}</div></div>
+   <div class="stats-mask type-mask"><div class="box-title">TIPO DE APUNTE</div><div class="donut-wrap">${donut(es)}</div></div>
+   <div class="stats-mask week-mask"><div class="box-title">DÍA DE LA SEMANA</div><div class="bars">${weekBars(es)}</div></div>
+   <div class="stats-details"><div class="detail-head"><button id="prevYear">‹</button><b>${year}</b><button id="nextYear">›</button></div><div class="detail-grid"><div><strong>N</strong><span>Total ${n.length}</span><span>Media ${avgBetween(n.map(e=>e.date))==null?'—':avgBetween(n.map(e=>e.date)).toFixed(1)+' días'}</span></div><div><strong>L</strong><span>Total ${l.length}</span><span>Media ${avgBetween(l.map(e=>e.date))==null?'—':avgBetween(l.map(e=>e.date)).toFixed(1)+' días'}</span></div><div><strong>T</strong><span>Total ${t.length}</span><span>Sin mezclar con N</span></div></div><div class="result-detail"><b>CÓMO HA IDO</b>${['N','L','T'].map(type=>{const a=es.filter(e=>e.type===type),r=a.filter(e=>e.result),u=a.length-r.length;return `<div><strong>${type}</strong><span>Bien ${r.filter(e=>e.result==='Bien').length}</span><span>Regular ${r.filter(e=>e.result==='Regular').length}</span><span>Mal ${r.filter(e=>e.result==='Mal').length}</span>${u?`<span>Sin valorar ${u}</span>`:''}</div>`}).join('')}</div></div>${nav('stats')}</div>`;
+ $("#prevYear").onclick=()=>{statsYear--;render()};$("#nextYear").onclick=()=>{statsYear++;render()};$("#backBtn").onclick=()=>{currentTab='home';render()};bindNav();
 }
 
-async function exportData(){
-  const entries=await allEntries();const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),entries},null,2)],{type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`apuntes-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);showToast("Datos exportados");
-}
-$("#importFile").addEventListener("change",async ev=>{
-  const file=ev.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.entries))throw Error();
-    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||!["","Mal","Regular","Bien"].includes(e.result??""))continue;await addEntry({date:e.date,type:e.type,result:e.result??"",note:e.note||""})}
-    showToast("Datos importados");render();
-  }catch{alert("El archivo no es válido.")}ev.target.value="";
-});
-document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;render()});
-initIcons();
-if("serviceWorker"in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));
-render();
+function renderHistory(entries){const es=sorted(entries);const rows=es.map(e=>`<button class="history-row" data-id="${e.id}"><div class="hdate"><b>${dayName(e.date)}</b><span>${fmtDate(e.date)}</span></div><div class="htype ${e.type}">${e.type}</div><div class="hdesc"><b>${e.type==='N'?'Apunte normal':e.type==='L'?'Apunte ligero':'Apunte técnico'}</b>${e.result?`<span class="${resultClass(e.result)}">${e.result}</span>`:'<span class="unrated">Sin valorar</span>'}${e.note?`<small>${esc(e.note)}</small>`:''}</div><i>›</i></button>`).join('');$("#screen").innerHTML=`<div class="skin history-skin"></div><div class="skin-overlay history-overlay">${title('HISTORIAL',true)}<div class="history-list">${rows||'<div class="empty-history">Aún no hay apuntes.</div>'}</div><div class="history-actions"><button id="exportBtn">⇧<span>EXPORTAR</span></button><button id="importBtn">⇩<span>IMPORTAR</span></button></div>${nav('history')}</div>`;$("#backBtn").onclick=()=>{currentTab='home';render()};$("#exportBtn").onclick=exportData;$("#importBtn").onclick=()=>$("#importFile").click();document.querySelectorAll('.history-row').forEach(b=>b.onclick=()=>openForm(Number(b.dataset.id)));bindNav()}
+
+async function openForm(id=null){editingId=id;const existing=id?(await allEntries()).find(e=>e.id===id):null;const date=existing?.date||new Date().toISOString().slice(0,10),type=existing?.type||'N',result=existing?.result||'',note=existing?.note||'';const modal=$("#modal");modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');modal.innerHTML=`<div class="form-shell"><div class="form-title"><button id="closeForm">‹</button><b>${id?'EDITAR APUNTE':'AÑADIR APUNTE'}</b></div><label>FECHA</label><input id="fDate" type="date" value="${date}"><label>TIPO</label><div class="choices type-choices">${['N','L','T'].map(t=>`<button data-type="${t}" class="${t===type?'selected':''} ${t}">${t}</button>`).join('')}</div><label>CÓMO HA IDO</label><div class="choices result-choices">${[['','Sin valorar'],['Mal','Mal'],['Regular','Regular'],['Bien','Bien']].map(([v,l])=>`<button data-result="${v}" class="${v===result?'selected':''} ${resultClass(v)}">${l}</button>`).join('')}</div><label>NOTAS <small>(opcional)</small></label><textarea id="fNote" maxlength="200" placeholder="Añade una nota...">${esc(note)}</textarea><div class="form-buttons"><button id="cancelForm">CANCELAR</button><button id="saveForm">GUARDAR APUNTE</button></div>${id?'<button class="delete" id="deleteForm">ELIMINAR APUNTE</button>':''}</div>`;let st=type,sr=result;document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{st=b.dataset.type;document.querySelectorAll('[data-type]').forEach(x=>x.classList.remove('selected'));b.classList.add('selected')});document.querySelectorAll('[data-result]').forEach(b=>b.onclick=()=>{sr=b.dataset.result;document.querySelectorAll('[data-result]').forEach(x=>x.classList.remove('selected'));b.classList.add('selected')});const close=()=>{modal.classList.add('hidden');editingId=null};$("#closeForm").onclick=close;$("#cancelForm").onclick=close;$("#saveForm").onclick=async()=>{const e={...(existing||{}),date:$("#fDate").value,type:st,result:sr,note:$("#fNote").value.trim()};if(!e.date)return;id?await putEntry(e):await addEntry(e);close();showToast(id?'Apunte actualizado':'Apunte guardado');render()};if(id)$("#deleteForm").onclick=async()=>{if(confirm('¿Eliminar este apunte?')){await deleteEntry(id);close();showToast('Apunte eliminado');render()}}}
+
+async function exportData(){const entries=await allEntries();const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),entries},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`apuntes-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+$("#importFile").addEventListener('change',async ev=>{const f=ev.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.entries))throw 0;for(const e of d.entries)if(e.date&&['N','L','T'].includes(e.type)&&['','Mal','Regular','Bien'].includes(e.result??''))await addEntry({date:e.date,type:e.type,result:e.result??'',note:e.note||''});showToast('Datos importados');render()}catch{alert('El archivo no es válido.')}ev.target.value=''})
+render();if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js'));

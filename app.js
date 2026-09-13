@@ -19,6 +19,7 @@ function typeClass(t){return t}
 function showToast(msg){const x=document.createElement("div");x.className="toast";x.textContent=msg;document.body.appendChild(x);setTimeout(()=>x.remove(),1800)}
 
 async function render(){
+  window.scrollTo(0,0);
   document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.tab===currentTab));
   const entries=await allEntries();
   if(currentTab==="home") renderHome(entries);

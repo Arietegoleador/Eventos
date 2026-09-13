@@ -25,7 +25,7 @@ function mean(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:0}
 function avgBetween(arr){if(arr.length<2)return null;arr=[...arr].sort();return mean(arr.slice(1).map((d,i)=>diffDays(arr[i],d)))}
 function nEntries(entries){return entries.filter(e=>e.type==="N"||e.type==="L")}
 function sorted(entries){return [...entries].sort((a,b)=>b.date.localeCompare(a.date))}
-function resultClass(r){return r==="Bien"?"bien":r==="Regular"?"regular":"mal"}
+function resultClass(r){return r==="Bien"?"bien":r==="Regular"?"regular":r==="Mal"?"mal":"unrated"}
 function typeClass(t){return t}
 function showToast(msg){const x=document.createElement("div");x.className="toast";x.textContent=msg;document.body.appendChild(x);setTimeout(()=>x.remove(),1800)}
 
@@ -111,7 +111,7 @@ function renderStats(entries){
 function dataLines(list,dates,type){const av=avgBetween(dates);let ds=dates.length?[...dates].sort():"";return `<div class="line"><span>Total</span><strong>${list.length}</strong></div><div class="line"><span>Media entre ${type}</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${range(dates)[0]}</strong></div><div class="line"><span>Más largo</span><strong>${range(dates)[1]}</strong></div>`}
 function range(ds){if(ds.length<2)return["—","—"];const a=[...ds].sort();const d=a.slice(1).map((x,i)=>diffDays(a[i],x));return[Math.min(...d)+" días",Math.max(...d)+" días"]}
 function intervalLines(ds){const [a,b]=range(ds),av=avgBetween(ds);return `<div class="line"><span>Media</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${a}</strong></div><div class="line"><span>Más largo</span><strong>${b}</strong></div>`}
-function ratingCard(type,es){const arr=es.filter(e=>e.type===type),total=arr.length;return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${["Bien","Regular","Mal"].map(r=>{const n=arr.filter(e=>e.result===r).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}</div>`}
+function ratingCard(type,es){const arr=es.filter(e=>e.type===type),rated=arr.filter(e=>["Bien","Regular","Mal"].includes(e.result)),total=rated.length,unrated=arr.length-rated.length;return `<div class="rating"><h4 class="${type==="N"?"n":type==="L"?"l":"t"}">${type}</h4>${["Bien","Regular","Mal"].map(r=>{const n=rated.filter(e=>e.result===r).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}${unrated?`<div class="rating-row unrated"><span>Sin valorar</span><strong>${unrated}</strong></div>`:""}</div>`}
 
 function renderHistory(entries){
   const es=sorted(entries);
@@ -121,7 +121,7 @@ function renderHistory(entries){
     <div class="history-tools"><button class="tool-btn" id="exportBtn"><span>↥</span> EXPORTAR</button><button class="tool-btn" id="importBtn"><span>↧</span> IMPORTAR</button></div>
     <div>${es.length?es.map(e=>`<button class="entry" data-id="${e.id}">
       <div class="entry-date">${fmtDate(e.date)}</div><div class="entry-type ${typeClass(e.type)}">${e.type}</div>
-      <div><div class="entry-result ${resultClass(e.result)}">${e.result}</div>${e.note?`<div class="entry-note">${escapeHtml(e.note)}</div>`:""}</div><div class="chev">›</div>
+      <div><div class="entry-result ${resultClass(e.result)}">${e.result||"Sin valorar"}</div>${e.note?`<div class="entry-note">${escapeHtml(e.note)}</div>`:""}</div><div class="chev">›</div>
     </button>`).join(""):`<section class="panel" style="text-align:center;padding:35px 15px;color:#77949f">Aún no hay apuntes.</section>`}</div>`;
   $("#backHome").onclick=()=>{currentTab="home";render()};
   $("#exportBtn").onclick=exportData;$("#importBtn").onclick=()=>$("#importFile").click();
@@ -133,7 +133,7 @@ async function openForm(id=null){
   editingId=id;
   const existing=id? (await allEntries()).find(e=>e.id===id):null;
   const date=existing?.date||new Date().toISOString().slice(0,10);
-  const type=existing?.type||"N", result=existing?.result||"Bien", note=existing?.note||"";
+  const type=existing?.type||"N", result=existing?.result||"", note=existing?.note||"";
   $("#modal").classList.remove("hidden");$("#modal").setAttribute("aria-hidden","false");
   $("#modal").innerHTML=`<div class="modal-card">
     <div class="titlebar"><button class="back" id="closeForm">‹</button><h1>${id?"EDITAR APUNTE":"AÑADIR APUNTE"}</h1></div>
@@ -141,7 +141,7 @@ async function openForm(id=null){
     <div class="field-label" style="margin-top:16px">TIPO</div>
     <div class="choice-grid" id="typeChoices">${["N","L","T"].map(t=>`<button class="choice type-${t.toLowerCase()} ${t===type?"selected":""}" data-type="${t}">${t}</button>`).join("")}</div>
     <div class="field-label" style="margin-top:16px">CÓMO HA IDO</div>
-    <div class="choice-grid" id="resultChoices">${["Mal","Regular","Bien"].map(r=>`<button class="choice ${resultClass(r)} ${r===result?"selected":""}" data-result="${r}">${r}</button>`).join("")}</div>
+    <div class="choice-grid" id="resultChoices">${["","Mal","Regular","Bien"].map(r=>`<button class="choice ${resultClass(r)} ${r===result?"selected":""}" data-result="${r}">${r||"Sin valorar"}</button>`).join("")}</div>
     <div class="field-label" style="margin-top:16px">NOTAS <span style="opacity:.6">(opcional)</span></div>
     <textarea class="notes" id="fNote" maxlength="200" placeholder="Añade una nota...">${escapeHtml(note)}</textarea>
     <div class="form-actions" style="margin-top:12px"><button class="secondary" id="cancelForm">CANCELAR</button><button class="gold-btn" id="saveForm">GUARDAR APUNTE</button></div>
@@ -162,7 +162,7 @@ async function exportData(){
 }
 $("#importFile").addEventListener("change",async ev=>{
   const file=ev.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.entries))throw Error();
-    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||!["Mal","Regular","Bien"].includes(e.result))continue;await addEntry({date:e.date,type:e.type,result:e.result,note:e.note||""})}
+    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||!["","Mal","Regular","Bien"].includes(e.result??""))continue;await addEntry({date:e.date,type:e.type,result:e.result??"",note:e.note||""})}
     showToast("Datos importados");render();
   }catch{alert("El archivo no es válido.")}ev.target.value="";
 });

@@ -21,6 +21,7 @@ function showToast(msg){const x=document.createElement("div");x.className="toast
 async function render(){
   window.scrollTo(0,0);
   document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.tab===currentTab));
+  document.body.classList.toggle("secondary-screen",currentTab!=="home");
   const entries=await allEntries();
   if(currentTab==="home") renderHome(entries);
   if(currentTab==="stats") renderStats(entries);
@@ -55,10 +56,9 @@ function renderHome(entries){
           const es=ns.filter(e=>e.date.startsWith(key)).sort((a,b)=>a.date.localeCompare(b.date));
           const ts=entries.filter(e=>e.type==="T"&&e.date.startsWith(key)).length;
           return `<div class="month-col ${m===now.getMonth()&&y===now.getFullYear()?"current":""}">
-            <div class="slots">${[0,1,2,3,4].map(i=>{const e=es[i];return e?`<div class="slot ${resultClass(e.result)} ${e.type==="L"?"l":""}">${e.type==="L"?"L":""}</div>`:`<div class="slot empty"></div>`}).join("")}</div>
+            <div class="slots">${[4,3,2,1,0].map(i=>{const e=es[i];return e?`<div class="slot ${resultClass(e.result)} ${e.type==="L"?"l":""}">${e.type==="L"?"L":""}</div>`:`<div class="slot empty"></div>`}).join("")}</div>
             <div class="t-dots">${Array.from({length:Math.min(ts,5)},()=>`<i class="t-dot"></i>`).join("")}</div>
-            <div class="month-plate">${monthName(m)}<br>${y}</div>
-            ${es.length>5?`<div class="extra">+${es.length-5}</div>`:""}
+            <div class="month-plate ${es.length>5?"over":""}"><span>${monthName(m)}</span><small>${y}</small>${es.length>5?`<b>+${es.length-5}</b>`:""}</div>
           </div>`
         }).join("")}
       </div>
@@ -107,8 +107,8 @@ function renderHistory(entries){
   const es=sorted(entries);
   $("#screen").innerHTML=`
     <div class="titlebar"><button class="back" id="backHome">‹</button><h1>HISTORIAL</h1></div>
-    <div class="history-head"><span>◉ &nbsp;${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
-    <div class="history-tools" style="margin-bottom:10px"><button class="tool-btn" id="exportBtn">EXPORTAR</button><button class="tool-btn" id="importBtn">IMPORTAR</button></div>
+    <div class="history-head"><span><b class="db-icon">●</b> ${es.length} APUNTES EN TOTAL</span><span>↓ &nbsp;Más recientes primero</span></div>
+    <div class="history-tools"><button class="tool-btn" id="exportBtn"><span>↥</span> EXPORTAR</button><button class="tool-btn" id="importBtn"><span>↧</span> IMPORTAR</button></div>
     <div>${es.length?es.map(e=>`<button class="entry" data-id="${e.id}">
       <div class="entry-date">${fmtDate(e.date)}</div><div class="entry-type ${typeClass(e.type)}">${e.type}</div>
       <div><div class="entry-result ${resultClass(e.result)}">${e.result}</div>${e.note?`<div class="entry-note">${escapeHtml(e.note)}</div>`:""}</div><div class="chev">›</div>

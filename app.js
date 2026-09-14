@@ -15,20 +15,26 @@ function avgBetween(arr){if(arr.length<2)return null;arr=[...arr].sort();return 
 function nEntries(entries){return entries.filter(e=>e.type==="N"||e.type==="L")}
 function sorted(entries){return [...entries].sort((a,b)=>b.date.localeCompare(a.date))}
 function resultClass(r){return r==="Bien"?"bien":r==="Regular"?"regular":r==="Mal"?"mal":"unrated"}
-function typeClass(t){return t}
-function showToast(msg){const x=document.createElement("div");x.className="toast";x.textContent=msg;document.body.appendChild(x);setTimeout(()=>x.remove(),1800)}
 
 const initialData=[
-  {date:"2026-08-30",type:"N"},{date:"2026-08-10",type:"L"},{date:"2026-08-02",type:"L"},
-  {date:"2026-07-14",type:"L"},{date:"2026-07-01",type:"N"},{date:"2026-06-14",type:"N"},
-  {date:"2026-05-30",type:"N"},{date:"2026-05-21",type:"L"},{date:"2026-05-08",type:"N"}
+  {date:"2026-08-30",type:"N",result:"",note:""},
+  {date:"2026-08-10",type:"L",result:"",note:""},
+  {date:"2026-08-02",type:"L",result:"",note:""},
+  {date:"2026-07-14",type:"L",result:"",note:""},
+  {date:"2026-07-01",type:"N",result:"",note:""},
+  {date:"2026-06-14",type:"N",result:"",note:""},
+  {date:"2026-05-30",type:"N",result:"",note:""},
+  {date:"2026-05-21",type:"L",result:"",note:""},
+  {date:"2026-05-08",type:"N",result:"",note:""}
 ];
 async function ensureInitialData(){
-  const existing=await allEntries();
+  const entries=await allEntries();
   for(const seed of initialData){
-    if(!existing.some(e=>e.date===seed.date&&e.type===seed.type)) await addEntry({...seed,result:"",note:""});
+    if(!entries.some(e=>e.date===seed.date&&e.type===seed.type)) await addEntry(seed);
   }
 }
+function typeClass(t){return t}
+function showToast(msg){const x=document.createElement("div");x.className="toast";x.textContent=msg;document.body.appendChild(x);setTimeout(()=>x.remove(),1800)}
 
 async function render(){
   window.scrollTo(0,0);
@@ -79,57 +85,58 @@ function renderHome(entries){
 }
 
 function renderStats(entries){
-  const year=statsYear, es=entries.filter(e=>e.date.startsWith(String(year)));
-  const ns=nEntries(es), l=es.filter(e=>e.type==="L"), ts=es.filter(e=>e.type==="T");
-  const nDates=ns.map(e=>e.date), lDates=l.map(e=>e.date);
-  const total=ns.length;
-  const monthly=Array.from({length:12},(_,m)=>ns.filter(e=>e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)));
+  const year=statsYear, yearEntries=entries.filter(e=>e.date.startsWith(String(year)));
   const allNL=nEntries(entries).sort((a,b)=>a.date.localeCompare(b.date));
-  const allDates=allNL.map(e=>e.date);
+  const ns=yearEntries.filter(e=>e.type==="N"), l=yearEntries.filter(e=>e.type==="L"), ts=yearEntries.filter(e=>e.type==="T");
+  const nDates=ns.map(e=>e.date), lDates=l.map(e=>e.date), nlDates=yearEntries.filter(e=>e.type==="N"||e.type==="L").map(e=>e.date).sort();
+  const monthly=Array.from({length:12},(_,m)=>yearEntries.filter(e=>e.type==="N"||e.type==="L"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)));
+  const monthlyNL=Array.from({length:12},(_,m)=>yearEntries.filter(e=>(e.type==="N"||e.type==="L")&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)));
+  const firstDate=allNL.length?allNL[0].date:null;
   const today=new Date().toISOString().slice(0,10);
-  const firstDate=allDates[0], lastDate=allDates.at(-1);
-  const elapsedMonths=firstDate ? ((new Date(today.slice(0,7)+"-01").getFullYear()-Number(firstDate.slice(0,4)))*12 + (new Date(today.slice(0,7)+"-01").getMonth()-Number(firstDate.slice(5,7)))+1) : 0;
-  const monthlyAvg=elapsedMonths ? allNL.length/elapsedMonths : null;
-  const avg=avgBetween(allDates);
-  const sinceLast=lastDate?diffDays(lastDate,today):null;
-  const chartMax=5, chartHeight=150;
-  const h=allDates.length?avgBetween(allDates):null;
-  const pctRows=(arr)=>["Bien","Regular","Mal","Sin valorar"].map(r=>{const n=arr.filter(e=>(e.result||"")=== (r==="Sin valorar"?"":r)).length;const den=arr.length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${den?` (${Math.round(n/den*100)}%)`:""}</strong></div>`}).join("");
-  const ratingCard2=(type)=>{const arr=es.filter(e=>e.type===type);return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${pctRows(arr)}</div>`};
-  const dataCard=(type,list,dates)=>`<div class="data-card ${type}"><h3>${type}</h3>${dataLines(list,dates,type)}</div>`;
-  const tLast=ts.length?diffDays([...ts].sort((a,b)=>a.date.localeCompare(b.date)).at(-1).date,today):null;
-  const yLabel=year;
-  const bars=monthly.map((arr,m)=>{
-    const count=arr.length, tc=es.filter(e=>e.type==="T"&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).length;
-    return `<div class="bar-wrap"><i class="bar-t" style="display:${tc?"block":"none"}"></i><div class="bar-stack" style="height:${count?Math.max(6,count/chartMax*chartHeight):0}px"><div class="bar-total" style="height:${Math.min(count,chartMax)/chartMax*chartHeight}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`;
+  const lastDate=allNL.length?allNL.at(-1).date:null;
+  const monthsActive=firstDate?Math.max(1,(new Date(today.slice(0,7)+"-01T12:00:00").getFullYear()-Number(firstDate.slice(0,4)))*12+(new Date(today.slice(0,7)+"-01T12:00:00").getMonth()-Number(firstDate.slice(5,7)))+1):0;
+  const monthlyAvg=allNL.length?(allNL.length/monthsActive):null;
+  const interval=avgBetween(allNL.map(e=>e.date));
+  const daysLast=lastDate?Math.max(0,diffDays(lastDate,today)):null;
+  const totalNL=allNL.length;
+  const chartMax=5, chartHeight=170;
+  const chartRows=[5,4,3,2,1,0];
+  const chartBars=monthlyNL.map((arr,m)=>{
+    const nc=arr.filter(e=>e.type==="N").length, lc=arr.filter(e=>e.type==="L").length;
+    const total=Math.min(5,nc+lc);
+    const nHeight=total?Math.round((nc/chartMax)*chartHeight):0;
+    const lHeight=total?Math.round((lc/chartMax)*chartHeight):0;
+    return `<div class="bar-wrap"><div class="bar-stack"><div class="bar-l" style="height:${lHeight}px"></div><div class="bar-n" style="height:${nHeight}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`;
   }).join("");
-  const visibleAvg=avg==null?"—":avg.toFixed(1).replace(".",",");
-  const visibleMonthly=monthlyAvg==null?"—":monthlyAvg.toFixed(1).replace(".",",");
-  const visibleSince=sinceLast==null?"—":sinceLast;
-  const visibleH=h==null?"—":h.toFixed(1).replace(".",",");
-  const firstInfo=firstDate?fmtDate(firstDate):"—";
+  const tTotal=entries.filter(e=>e.type==="T").length, tSorted=entries.filter(e=>e.type==="T").sort((a,b)=>a.date.localeCompare(b.date));
+  const tLast=tSorted.at(-1)?.date;
   $("#screen").innerHTML=`
     <div class="titlebar"><button class="back" id="backHome">‹</button><h1>ESTADÍSTICAS</h1></div>
-    <div class="year-nav"><button id="prevYear">‹</button><div class="year">${yLabel}⌄</div><button id="nextYear">›</button></div>
+    <div class="year-nav"><button id="prevYear">‹</button><div class="year">${year}⌄</div><button id="nextYear">›</button></div>
     <section class="panel"><div class="panel-title">RESUMEN GENERAL</div>
       <div class="summary-grid">
-        <div class="summary"><b>${allNL.length}</b><span>TOTAL N<br>(N + L)</span></div>
-        <div class="summary"><b>${visibleMonthly}</b><span>N / MES<br>DESDE ${firstInfo}</span></div>
-        <div class="summary"><b>${visibleAvg}</b><span>DÍAS ENTRE APUNTES</span></div>
-        <div class="summary"><b>${visibleSince}</b><span>DÍAS DESDE ÚLTIMO N/L</span></div>
+        <div class="summary"><b>${totalNL||"—"}</b><span>TOTAL N<br>(N + L)</span></div>
+        <div class="summary"><b>${monthlyAvg==null?"—":monthlyAvg.toFixed(1).replace(".",",")}</b><span>N + L / MES</span></div>
+        <div class="summary"><b>${interval==null?"—":interval.toFixed(1).replace(".",",")}</b><span>DÍAS ENTRE APUNTES</span></div>
+        <div class="summary"><b>${daysLast==null?"—":daysLast}</b><span>DÍAS DESDE ÚLTIMO N/L</span></div>
       </div>
     </section>
     <section class="panel"><div class="panel-title">EVOLUCIÓN MENSUAL (N + L)</div>
-      <div class="chart"><div class="chart-grid">${[5,4,3,2,1,0].map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div><div class="bars">${bars}</div></div>
+      <div class="chart-legend"><span><i class="legend-n"></i>N</span><span><i class="legend-l"></i>L</span></div>
+      <div class="chart"><div class="chart-grid">${chartRows.map(n=>`<div class="chart-line"><span>${n}</span></div>`).join("")}</div><div class="bars">${chartBars}</div></div>
     </section>
-    <div class="card-grid">${dataCard("N",ns,nDates)}${dataCard("L",l,lDates)}<div class="data-card T full"><h3>T</h3><div class="line"><span>Total</span><strong>${ts.length}</strong></div><div class="line"><span>Días desde la última</span><strong>${tLast==null?"—":tLast+" días"}</strong></div><div class="line"><span>Nota</span><strong>No cuentan como N</strong></div></div></div>
-    <section class="panel"><div class="panel-title">CÓMO HA IDO</div><div class="rating-grid">${["N","L","T"].map(ratingCard2).join("")}</div></section>`;
+    <div class="card-grid">
+      <div class="data-card N"><h3>N</h3>${dataLines(ns,nDates,"N")}</div>
+      <div class="data-card L"><h3>L</h3>${dataLines(l,lDates,"L")}</div>
+      <div class="data-card T full"><h3>T</h3><div class="line"><span>Total</span><strong>${tTotal}</strong></div><div class="line"><span>Días desde la última</span><strong>${tLast?diffDays(tLast,today)+" días":"—"}</strong></div><div class="line"><span>Nota</span><strong>No cuentan como N</strong></div></div>
+    </div>
+    <section class="panel"><div class="panel-title">CÓMO HA IDO</div><div class="rating-grid">${["N","L","T"].map(t=>ratingCard(t,yearEntries)).join("")}</div></section>`;
   $("#prevYear").onclick=()=>{statsYear--;render()};$("#nextYear").onclick=()=>{statsYear++;render()};$("#backHome").onclick=()=>{currentTab="home";render()};
 }
 function dataLines(list,dates,type){const av=avgBetween(dates);let ds=dates.length?[...dates].sort():"";return `<div class="line"><span>Total</span><strong>${list.length}</strong></div><div class="line"><span>Media entre ${type}</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${range(dates)[0]}</strong></div><div class="line"><span>Más largo</span><strong>${range(dates)[1]}</strong></div>`}
 function range(ds){if(ds.length<2)return["—","—"];const a=[...ds].sort();const d=a.slice(1).map((x,i)=>diffDays(a[i],x));return[Math.min(...d)+" días",Math.max(...d)+" días"]}
 function intervalLines(ds){const [a,b]=range(ds),av=avgBetween(ds);return `<div class="line"><span>Media</span><strong>${av==null?"—":av.toFixed(1).replace(".",",")+" días"}</strong></div><div class="line"><span>Más corto</span><strong>${a}</strong></div><div class="line"><span>Más largo</span><strong>${b}</strong></div>`}
-function ratingCard(type,es){const arr=es.filter(e=>e.type===type),total=arr.length;return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${["Bien","Regular","Mal","Sin valorar"].map(r=>{const n=arr.filter(e=>(e.result||"")=== (r==="Sin valorar"?"":r)).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}</div>`}
+function ratingCard(type,es){const arr=es.filter(e=>e.type===type),total=arr.length;return `<div class="rating"><h4 class="${type==="N"?"bien":type==="L"?"regular":"mal"}">${type}</h4>${["Sin valorar","Bien","Regular","Mal"].map(r=>{const n=arr.filter(e=>(r==="Sin valorar"?!e.result:e.result===r)).length;return `<div class="rating-row ${resultClass(r)}"><span>${r}</span><strong>${n}${total?` (${Math.round(n/total*100)}%)`:""}</strong></div>`}).join("")}</div>`}
 
 function renderHistory(entries){
   const es=sorted(entries);
@@ -151,7 +158,7 @@ async function openForm(id=null){
   editingId=id;
   const existing=id? (await allEntries()).find(e=>e.id===id):null;
   const date=existing?.date||new Date().toISOString().slice(0,10);
-  const type=existing?.type||"N", result=existing?.result||"", note=existing?.note||"";
+  const type=existing?.type||"N", result=existing?existing.result:"", note=existing?.note||"";
   $("#modal").classList.remove("hidden");$("#modal").setAttribute("aria-hidden","false");
   $("#modal").innerHTML=`<div class="modal-card">
     <div class="titlebar"><button class="back" id="closeForm">‹</button><h1>${id?"EDITAR APUNTE":"AÑADIR APUNTE"}</h1></div>
@@ -159,7 +166,7 @@ async function openForm(id=null){
     <div class="field-label" style="margin-top:16px">TIPO</div>
     <div class="choice-grid" id="typeChoices">${["N","L","T"].map(t=>`<button class="choice type-${t.toLowerCase()} ${t===type?"selected":""}" data-type="${t}">${t}</button>`).join("")}</div>
     <div class="field-label" style="margin-top:16px">CÓMO HA IDO</div>
-    <div class="choice-grid" id="resultChoices">${["Sin valorar","Bien","Regular","Mal"].map(r=>`<button class="choice ${resultClass(r)} ${r===result||(!result&&r==="Sin valorar")?"selected":""}" data-result="${r}">${r}</button>`).join("")}</div>
+    <div class="choice-grid" id="resultChoices">${["Sin valorar","Mal","Regular","Bien"].map(r=>`<button class="choice ${resultClass(r)} ${r===result||(!result&&r==="Sin valorar")?"selected":""}" data-result="${r=== "Sin valorar" ? "" : r}">${r}</button>`).join("")}</div>
     <div class="field-label" style="margin-top:16px">NOTAS <span style="opacity:.6">(opcional)</span></div>
     <textarea class="notes" id="fNote" maxlength="200" placeholder="Añade una nota...">${escapeHtml(note)}</textarea>
     <div class="form-actions" style="margin-top:12px"><button class="secondary" id="cancelForm">CANCELAR</button><button class="gold-btn" id="saveForm">GUARDAR APUNTE</button></div>
@@ -170,7 +177,7 @@ async function openForm(id=null){
   document.querySelectorAll("#resultChoices .choice").forEach(b=>b.onclick=()=>{selectedResult=b.dataset.result;document.querySelectorAll("#resultChoices .choice").forEach(x=>x.classList.remove("selected"));b.classList.add("selected")});
   const close=()=>{$("#modal").classList.add("hidden");editingId=null};
   $("#closeForm").onclick=close;$("#cancelForm").onclick=close;
-  $("#saveForm").onclick=async()=>{const wasEditing=Boolean(editingId);const e={...(existing||{}),date:$("#fDate").value,type:selectedType,result:selectedResult==="Sin valorar"?"":selectedResult,note:$("#fNote").value.trim()};if(!e.date)return;wasEditing?await putEntry(e):await addEntry(e);close();showToast(wasEditing?"Apunte actualizado":"Apunte guardado");render()};
+  $("#saveForm").onclick=async()=>{const wasEditing=Boolean(editingId);const e={...(existing||{}),date:$("#fDate").value,type:selectedType,result:selectedResult,note:$("#fNote").value.trim()};if(!e.date)return;wasEditing?await putEntry(e):await addEntry(e);close();showToast(wasEditing?"Apunte actualizado":"Apunte guardado");render()};
   if(id)$("#deleteForm").onclick=async()=>{if(confirm("¿Eliminar este apunte?")){await deleteEntry(id);close();showToast("Apunte eliminado");render()}};
 }
 
@@ -180,10 +187,10 @@ async function exportData(){
 }
 $("#importFile").addEventListener("change",async ev=>{
   const file=ev.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.entries))throw Error();
-    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||!["","Mal","Regular","Bien"].includes(e.result||""))continue;await addEntry({date:e.date,type:e.type,result:e.result,note:e.note||""})}
-    showToast("Datos importados");ensureInitialData().then(render);
+    for(const e of data.entries){if(!e.date||!["N","L","T"].includes(e.type)||!(e.result===""||["Mal","Regular","Bien"].includes(e.result)))continue;await addEntry({date:e.date,type:e.type,result:e.result||"",note:e.note||""})}
+    showToast("Datos importados");render();
   }catch{alert("El archivo no es válido.")}ev.target.value="";
 });
 document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;render()});
+ensureInitialData().then(()=>render());
 if("serviceWorker"in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));
-ensureInitialData().then(render);

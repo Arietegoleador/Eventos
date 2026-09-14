@@ -99,14 +99,17 @@ function renderStats(entries){
   const interval=avgBetween(allNL.map(e=>e.date));
   const daysLast=lastDate?Math.max(0,diffDays(lastDate,today)):null;
   const totalNL=allNL.length;
-  const chartMax=5, chartHeight=170;
+  const chartMax=5;
   const chartRows=[5,4,3,2,1,0];
   const chartBars=monthlyNL.map((arr,m)=>{
     const nc=arr.filter(e=>e.type==="N").length, lc=arr.filter(e=>e.type==="L").length;
-    const total=Math.min(5,nc+lc);
-    const nHeight=total?Math.round((nc/chartMax)*chartHeight):0;
-    const lHeight=total?Math.round((lc/chartMax)*chartHeight):0;
-    return `<div class="bar-wrap"><div class="bar-stack"><div class="bar-l" style="height:${lHeight}px"></div><div class="bar-n" style="height:${nHeight}px"></div></div><div class="bar-label">${monthName(m)}</div></div>`;
+    const total=Math.min(chartMax,nc+lc);
+    const shownN=Math.min(nc,total);
+    const shownL=Math.max(0,total-shownN);
+    const stackHeight=total?(total/chartMax)*100:0;
+    const nHeight=total?(shownN/total)*100:0;
+    const lHeight=total?(shownL/total)*100:0;
+    return `<div class="bar-wrap"><div class="bar-stack" style="height:${stackHeight}%"><div class="bar-l" style="height:${lHeight}%"></div><div class="bar-n" style="height:${nHeight}%"></div></div><div class="bar-label">${monthName(m)}</div></div>`;
   }).join("");
   const tTotal=entries.filter(e=>e.type==="T").length, tSorted=entries.filter(e=>e.type==="T").sort((a,b)=>a.date.localeCompare(b.date));
   const tLast=tSorted.at(-1)?.date;
